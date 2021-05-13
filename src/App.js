@@ -1,36 +1,54 @@
 import React from 'react';
 import Web3 from "web3";
 import IDOAbi from "./abi/IDO.json";
-import {Col, Row, Card, CardTitle, Button, Input} from 'reactstrap';
+import BEP20Abi from "./abi/BEP20.json";
+import {Col, Row, Card, CardTitle, CardText, Button, Input} from 'reactstrap';
 
 class App extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             web3: null,
+            contract: null,
             isConnectWallet: false,
             buyAmount: 0,
             rateInput: 0,
+            bicUser: 0,
+            busdUser: 0,
+            bicBalance: 0,
+            busdBalance: 0,
             rateOutput: 0,
+            _rateInput: 0,
+            _rateOutput: 0,
             bicAddress: null,
             busdAddress: null,
             withdrawToken: 'BIC',
             transferAdmin: null,
-            adminAddress: null
+            adminAddress: null,
+            currentAddress: null
         }
     }
     componentDidMount() {
-        this.syncData()
+        this.syncStaticData().then(() => {
+            this.syncContractBalance()
+            this.syncUserBalance()
+        })
+        this.syncChangeableData()
     }
 
     connectWithMetamask() {
         if(window.ethereum) {
             this.setState({
-                web3: new Web3(window.ethereum),
-                isConnectWallet: true
+                web3: new Web3(window.ethereum)
             }, async function () {
                 try {
                     await window.ethereum.request({ method: 'eth_requestAccounts' })
+                    const addresses = await this.state.web3.eth.getAccounts()
+                    this.setState({
+                        contract: new this.state.web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT),
+                        isConnectWallet: true,
+                        currentAddress: addresses[0]
+                    })
                 } catch (e) {
                     alert(`Something went wrong?\n ${e.message}`)
                 }
@@ -38,21 +56,80 @@ class App extends React.Component {
         } else alert('You need to have metamask first!')
     }
 
-    async syncData() {
+    async syncStaticData() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const bicAddr = await contract.methods.bicToken().call()
         const busdAddr = await contract.methods.busdToken().call()
+        this.setState({
+            bicAddress: bicAddr,
+            busdAddress: busdAddr,
+        })
+    }
+
+    async syncChangeableData() {
+        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
+        const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const rateInput = await contract.methods.input().call()
         const rateOutput = await contract.methods.output().call()
         const adminAddr = await contract.methods.owner().call()
         this.setState({
-            bicAddress: bicAddr,
-            busdAddress: busdAddr,
             adminAddress: adminAddr,
             rateInput: rateInput,
             rateOutput: rateOutput,
+            _rateInput: rateInput,
+            _rateOutput: rateOutput,
         })
+    }
+
+    async syncContractBalance() {
+        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
+        const bicContract = new web3.eth.Contract(BEP20Abi, this.state.bicAddress)
+        const busdContract = new web3.eth.Contract(BEP20Abi, this.state.busdAddress)
+        const _bicBalance = await bicContract.methods.balanceOf(process.env.REACT_APP_IDO_CONTRACT).call()
+        const _busdBalance = await busdContract.methods.balanceOf(process.env.REACT_APP_IDO_CONTRACT).call()
+        this.setState({
+            bicBalance: _bicBalance,
+            busdBalance: _busdBalance,
+        })
+    }
+
+    async syncUserBalance() {
+        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
+        const bicContract = new web3.eth.Contract(BEP20Abi, this.state.bicAddress)
+        const busdContract = new web3.eth.Contract(BEP20Abi, this.state.busdAddress)
+        const _bicBalance = await bicContract.methods.balanceOf(this.state.address).call()
+        const _busdBalance = await busdContract.methods.balanceOf(this.state.address).call()
+        this.setState({
+            bicUser: _bicBalance,
+            busdUser: _busdBalance,
+        })
+    }
+
+    handleChange(event) {
+        this.setState({[event.target.name]: event.target.value});
+    }
+
+    async updatePrice() {
+        await this.state.contract.methods.updatePrice(this.state._rateInput, this.state._rateOutput).send({from: this.state.currentAddress})
+        await this.syncChangeableData()
+    }
+
+    async withdrawToken() {
+        await this.state.contract.methods.withdraw(this.state.withdrawToken).send({from: this.state.currentAddress})
+        await this.syncContractBalance()
+        await this.syncUserBalance()
+    }
+
+    async transferAdmin() {
+        await this.state.contract.methods.transferOwnership(this.state.transferAdmin).send({from: this.state.currentAddress})
+        await this.syncChangeableData()
+    }
+
+    async buyBIC() {
+        await this.state.contract.methods.buy(Web3.utils.toWei(this.state.buyAmount)).send({from: this.state.currentAddress})
+        await this.syncContractBalance()
+        await this.syncUserBalance()
     }
 
     render() {
@@ -74,14 +151,14 @@ class App extends React.Component {
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Buy BIC (BUSD):</CardTitle>
-                            <Input type="number"/>
-                            <Button disabled={!this.state.isConnectWallet}>Buy</Button>
+                            <Input name="buyAmount" type="number" value={this.state.buyAmount} onChange={(e) => this.handleChange(e)}/>
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.buyBIC()}>Buy</Button>
                         </Card>
                     </Col>
                     <Col md="2">
                         <Card body>
                             <CardTitle tag="h3">Receive:</CardTitle>
-                            <p>1 BIC</p>
+                            <p>{this.state.buyAmount * this.state.rateOutput / this.state.rateInput || 0} BIC</p>
                         </Card>
                     </Col>
                 </Row>
@@ -90,26 +167,28 @@ class App extends React.Component {
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Update price (current 1BUSD = {this.state.rateOutput/this.state.rateInput || 0}BIC):</CardTitle>
-                            <Input type="number" placeholder="BUSD Rate" value={this.state.rateInput}/>
-                            <Input type="number" placeholder="BIC Rate"  value={this.state.rateOutput}/>
-                            <Button disabled={!this.state.isConnectWallet}>Change</Button>
+                            <Input type="number" placeholder="BUSD Rate" name="_rateInput" value={this.state._rateInput} onChange={(e) => this.handleChange(e)}/>
+                            <Input type="number" placeholder="BIC Rate" name="_rateOutput" value={this.state._rateOutput} onChange={(e) => this.handleChange(e)}  />
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.updatePrice()}>Change</Button>
                         </Card>
                     </Col>
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Withdraw token:</CardTitle>
-                            <Input type="select">
-                                <option value="0x">BIC</option>
-                                <option value="0x">BUSD</option>
+                            <CardText>BIC: {this.state.bicBalance}</CardText>
+                            <CardText>BUSD: {this.state.busdBalance}</CardText>
+                            <Input type="select" name="withdrawToken" value={this.state.withdrawToken} onChange={(e) => this.handleChange(e)} >
+                                <option value={this.state.bicAddress}>BIC</option>
+                                <option value={this.state.busdAddress}>BUSD</option>
                             </Input>
-                            <Button disabled={!this.state.isConnectWallet}>Withdraw</Button>
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.withdrawToken()}>Withdraw</Button>
                         </Card>
                     </Col>
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Transfer admin:</CardTitle>
-                            <Input type="string"/>
-                            <Button disabled={!this.state.isConnectWallet}>Buy</Button>
+                            <Input type="string" name="transferAdmin" value={this.state.transferAdmin} onChange={(e) => this.handleChange(e)}  />
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.transferAdmin()}>Transfer</Button>
                         </Card>
                     </Col>
                 </Row>
