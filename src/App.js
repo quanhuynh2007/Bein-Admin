@@ -17,6 +17,7 @@ class App extends React.Component {
             busdUser: 0,
             bicBalance: 0,
             busdBalance: 0,
+            lbicUser: 0,
             rateOutput: 0,
             _rateInput: 0,
             _rateOutput: 0,
@@ -24,11 +25,15 @@ class App extends React.Component {
             busdAddress: null,
             withdrawToken: null,
             transferAdmin: null,
+            whitelist: null,
             adminAddress: null,
             currentAddress: null,
             soldDetails: [],
             receivedDetails: [],
-            isShowDetails: false
+            isShowDetails: false,
+            isBuyable: false,
+            releaseWallet: null,
+            releaseTime: null
         }
     }
     componentDidMount() {
@@ -51,14 +56,16 @@ class App extends React.Component {
                     this.setState({
                         contract: new this.state.web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT),
                         isConnectWallet: true,
-                        currentAddress: addresses[0]
+                        currentAddress: addresses[0],
+                        releaseWallet: addresses[0]
                     }, function () {
                         self.syncUserBalance()
                     })
 
                     window.ethereum.on('accountsChanged', function(addresses){
                         self.setState({
-                            currentAddress: addresses[0]
+                            currentAddress: addresses[0],
+                            releaseWallet: addresses[0]
                         })
                     })
                 } catch (e) {
@@ -73,10 +80,12 @@ class App extends React.Component {
         const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const bicAddr = await contract.methods.bicToken().call()
         const busdAddr = await contract.methods.busdToken().call()
+        const releaseTime = await contract.methods.releaseTime().call()
         this.setState({
             bicAddress: bicAddr,
             busdAddress: busdAddr,
-            withdrawToken: bicAddr
+            withdrawToken: bicAddr,
+            releaseTime: new Date(releaseTime*1000).toString()
         })
     }
 
@@ -111,11 +120,18 @@ class App extends React.Component {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const bicContract = new web3.eth.Contract(BEP20Abi, this.state.bicAddress)
         const busdContract = new web3.eth.Contract(BEP20Abi, this.state.busdAddress)
+        const lbicContract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const _bicBalance = await bicContract.methods.balanceOf(this.state.currentAddress).call()
         const _busdBalance = await busdContract.methods.balanceOf(this.state.currentAddress).call()
+        const _lbicBalance = await lbicContract.methods.balanceOf(this.state.currentAddress).call()
+
+        const whiteList = await lbicContract.methods.whitelist(this.state.currentAddress).call()
+        console.log('whiteList: ', whiteList)
         this.setState({
             bicUser: Web3.utils.fromWei(_bicBalance),
             busdUser: Web3.utils.fromWei(_busdBalance),
+            lbicUser: Web3.utils.fromWei(_lbicBalance),
+            isBuyable: whiteList
         })
     }
 
@@ -129,12 +145,12 @@ class App extends React.Component {
             const result = e.returnValues
             soldLogs.push({
                 time: new Date(result.time*1000),
-                amount: result.bicAmont,
+                amount: result.bicAmount,
                 user: result.buyer,
             })
             receivedLogs.push({
                 time: new Date(result.time*1000),
-                amount: result.busdtAmount,
+                amount: result.busdAmount,
                 user: result.buyer,
             })
         })
@@ -164,6 +180,11 @@ class App extends React.Component {
         await this.syncChangeableData()
     }
 
+    async addWhiteList() {
+        await this.state.contract.methods.addToWhitelist(this.state.whitelist).send({from: this.state.currentAddress})
+        await this.syncChangeableData()
+    }
+
     async buyBIC() {
         const busdContract = new this.state.web3.eth.Contract(BEP20Abi, this.state.busdAddress)
         const allowance = await busdContract.methods.allowance(this.state.currentAddress, process.env.REACT_APP_IDO_CONTRACT).call()
@@ -174,6 +195,11 @@ class App extends React.Component {
         await this.state.contract.methods.buy(Web3.utils.toWei(this.state.buyAmount)).send({from: this.state.currentAddress})
         await this.syncContractBalance()
         await this.syncUserBalance()
+    }
+
+    async releaseBIC() {
+        await this.state.contract.methods.releaseBic(this.state.releaseWallet).send({from: this.state.currentAddress})
+        await this.syncChangeableData()
     }
 
     amountReport(details) {
@@ -208,11 +234,20 @@ class App extends React.Component {
                             <Input name="buyAmount" type="number" value={this.state.buyAmount} onChange={(e) => this.handleChange(e)}/>
                             <Button disabled={!this.state.isConnectWallet} onClick={() => this.buyBIC()}>Buy</Button>
                         </Card>
+                        <Card body>
+                            <CardTitle tag="h3">Release BIC:</CardTitle>
+                            <Input name="releaseWallet" type="text" value={this.state.releaseWallet} onChange={(e) => this.handleChange(e)}/>
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.releaseBIC()}>Buy</Button>
+                        </Card>
                     </Col>
                     <Col md="2">
                         <Card body>
                             <CardTitle tag="h3">Receive:</CardTitle>
                             <p>{this.state.buyAmount * this.state.rateOutput / this.state.rateInput || 0} BIC</p>
+                        </Card>
+                        <Card body>
+                            <CardTitle tag="h3">Can you buy?</CardTitle>
+                            <p>{this.state.isBuyable ? 'Yes' : 'No'}</p>
                         </Card>
                     </Col>
                     <Col md="2">
@@ -220,12 +255,14 @@ class App extends React.Component {
                             <CardTitle tag="h3">Balance:</CardTitle>
                             <p>{this.state.bicUser} BIC</p>
                             <p>{this.state.busdUser} BUSD</p>
+                            <p>{this.state.lbicUser} LBIC</p>
                         </Card>
                     </Col>
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Note:</CardTitle>
                             <CardText>The first time you buy, we need to request your permission to using your BUSD.</CardText>
+                            <CardText>You can release your BIC after {this.state.releaseTime}.</CardText>
                         </Card>
                     </Col>
                 </Row>
@@ -256,6 +293,11 @@ class App extends React.Component {
                             <CardTitle tag="h3">Transfer admin:</CardTitle>
                             <Input type="string" name="transferAdmin" value={this.state.transferAdmin} onChange={(e) => this.handleChange(e)}  />
                             <Button disabled={!this.state.isConnectWallet} onClick={() => this.transferAdmin()}>Transfer</Button>
+                        </Card>
+                        <Card body>
+                            <CardTitle tag="h3">Whitelist:</CardTitle>
+                            <Input type="string" name="whitelist" value={this.state.whitelist} onChange={(e) => this.handleChange(e)}  />
+                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.addWhiteList()}>Add</Button>
                         </Card>
                     </Col>
                 </Row>
@@ -305,7 +347,7 @@ class App extends React.Component {
                                     </thead>
                                     <tbody>
                                     {this.state.receivedDetails.map((e,index) => <tr>
-                                        <th key={'sold' + index}>{index + 1}</th>
+                                        <th key={'receive' + index}>{index + 1}</th>
                                         <td>{e.time.toString()}</td>
                                         <td>{e.user}</td>
                                         <td>{Web3.utils.fromWei(e.amount)}</td>
