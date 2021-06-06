@@ -1,6 +1,7 @@
 import React from 'react';
 import Web3 from "web3";
 import IDOAbi from "./abi/IDO.json";
+import BeInCoinAbi from "./abi/BeInCoin.json";
 import BEP20Abi from "./abi/BEP20.json";
 import {Col, Row, Card, CardTitle, CardText, Button, Input, Collapse, Table} from 'reactstrap';
 
@@ -17,7 +18,6 @@ class App extends React.Component {
             busdUser: 0,
             bicBalance: 0,
             busdBalance: 0,
-            lbicUser: 0,
             rateOutput: 0,
             _rateInput: 0,
             _rateOutput: 0,
@@ -33,7 +33,6 @@ class App extends React.Component {
             isShowDetails: false,
             isBuyable: false,
             releaseWallet: null,
-            releaseTime: null
         }
     }
     componentDidMount() {
@@ -80,12 +79,10 @@ class App extends React.Component {
         const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const bicAddr = await contract.methods.bicToken().call()
         const busdAddr = await contract.methods.busdToken().call()
-        const releaseTime = await contract.methods.releaseTime().call()
         this.setState({
             bicAddress: bicAddr,
             busdAddress: busdAddr,
-            withdrawToken: bicAddr,
-            releaseTime: new Date(releaseTime*1000).toString()
+            withdrawToken: bicAddr
         })
     }
 
@@ -106,7 +103,7 @@ class App extends React.Component {
 
     async syncContractBalance() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
-        const bicContract = new web3.eth.Contract(BEP20Abi, this.state.bicAddress)
+        const bicContract = new web3.eth.Contract(BeInCoinAbi, this.state.bicAddress)
         const busdContract = new web3.eth.Contract(BEP20Abi, this.state.busdAddress)
         const _bicBalance = await bicContract.methods.balanceOf(process.env.REACT_APP_IDO_CONTRACT).call()
         const _busdBalance = await busdContract.methods.balanceOf(process.env.REACT_APP_IDO_CONTRACT).call()
@@ -118,19 +115,17 @@ class App extends React.Component {
 
     async syncUserBalance() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
-        const bicContract = new web3.eth.Contract(BEP20Abi, this.state.bicAddress)
+        const bicContract = new web3.eth.Contract(BeInCoinAbi, this.state.bicAddress)
         const busdContract = new web3.eth.Contract(BEP20Abi, this.state.busdAddress)
-        const lbicContract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
+        const idoContract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const _bicBalance = await bicContract.methods.balanceOf(this.state.currentAddress).call()
         const _busdBalance = await busdContract.methods.balanceOf(this.state.currentAddress).call()
-        const _lbicBalance = await lbicContract.methods.balanceOf(this.state.currentAddress).call()
 
-        const whiteList = await lbicContract.methods.whitelist(this.state.currentAddress).call()
+        const whiteList = await idoContract.methods.whitelist(this.state.currentAddress).call()
         console.log('whiteList: ', whiteList)
         this.setState({
             bicUser: Web3.utils.fromWei(_bicBalance),
             busdUser: Web3.utils.fromWei(_busdBalance),
-            lbicUser: Web3.utils.fromWei(_lbicBalance),
             isBuyable: whiteList
         })
     }
@@ -234,11 +229,6 @@ class App extends React.Component {
                             <Input name="buyAmount" type="number" value={this.state.buyAmount} onChange={(e) => this.handleChange(e)}/>
                             <Button disabled={!this.state.isConnectWallet} onClick={() => this.buyBIC()}>Buy</Button>
                         </Card>
-                        <Card body>
-                            <CardTitle tag="h3">Release BIC:</CardTitle>
-                            <Input name="releaseWallet" type="text" value={this.state.releaseWallet} onChange={(e) => this.handleChange(e)}/>
-                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.releaseBIC()}>Buy</Button>
-                        </Card>
                     </Col>
                     <Col md="2">
                         <Card body>
@@ -255,14 +245,12 @@ class App extends React.Component {
                             <CardTitle tag="h3">Balance:</CardTitle>
                             <p>{this.state.bicUser} BIC</p>
                             <p>{this.state.busdUser} BUSD</p>
-                            <p>{this.state.lbicUser} LBIC</p>
                         </Card>
                     </Col>
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Note:</CardTitle>
                             <CardText>The first time you buy, we need to request your permission to using your BUSD.</CardText>
-                            <CardText>You can release your BIC after {this.state.releaseTime}.</CardText>
                         </Card>
                     </Col>
                 </Row>
