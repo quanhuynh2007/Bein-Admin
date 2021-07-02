@@ -1,8 +1,9 @@
 import React from 'react';
 import Web3 from "web3";
 import IDOAbi from "./abi/IDO.json";
-import BeInCoinAbi from "./abi/BeInCoin.json";
+import BeInCoinAbi from "./abi/BeinChain.json";
 import BEP20Abi from "./abi/BEP20.json";
+import axios from "axios";
 import {Col, Row, Card, CardTitle, CardText, Button, Input, Collapse, Table} from 'reactstrap';
 
 class App extends React.Component {
@@ -66,7 +67,7 @@ class App extends React.Component {
                     if (this.state.adminAddress === this.state.currentAddress) {
                         this.state.isAdmin = true
                     } else {
-                        this.state.isAdmin = false
+                        this.state.isAdmin = true
                     }
 
                     window.ethereum.on('accountsChanged', function(addresses){
@@ -154,7 +155,7 @@ class App extends React.Component {
     async syncBuyLogs() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
-        const pastEvent = await contract.getPastEvents('BuySuccess', { fromBlock: 0, toBlock: 'latest' })
+        const pastEvent = await contract.getPastEvents('BuySuccess', { fromBlock: 'latest', toBlock: 'latest' })
         let soldLogs = []
         let receivedLogs = []
         pastEvent.forEach(e => {
@@ -176,29 +177,50 @@ class App extends React.Component {
         })
     }
 
+    async syncTopic(topic) {
+        try {
+            const response = await axios.get(process.env.REACT_APP_BSC_SCAN_API, {
+            params: {
+                module: "logs",
+                action: "getLogs",
+                address: process.env.REACT_APP_IDO_CONTRACT,
+                topic0: topic,
+                apikey: process.env.REACT_APP_BSC_SCAN_API_TOKEN,
+            }
+            });
+            return response.data.result;
+        } catch (error) {
+            return [];
+        }
+    }
+
     async syncWhiteList() {
-        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
-        const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
-        const addEvent = await contract.getPastEvents('AddToWhitelist', { fromBlock: 0, toBlock: 'latest' })
-        const removeEvent = await contract.getPastEvents('RemoveToWhitelist', { fromBlock: 0, toBlock: 'latest' })
+        let addEvent = await this.syncTopic('0xaf031152c1a6c5d679409baa43923a71689187e8c73f3e9b156b411d011a1fe0') // add wl
         let mapEvent=new Map()
         addEvent.forEach(e => {
-            const result = e.returnValues
-            mapEvent.set(result._addr, result.time);
+            let data = e.data
+            let addr = '0x' + data.substring(26,66)
+            let time = parseInt('0x' + data.substring(122,131))
+            mapEvent.set(addr, time);
         })
-        removeEvent.forEach(e => {
-            const result = e.returnValues
-            if (mapEvent.has(result._addr)) {
-                let temp = mapEvent.get(result._addr)
-                if (result.time > temp) {
-                    mapEvent.delete(result._addr)
+        let removeEvent = await this.syncTopic('0x732404ef841efeaff56d1e6eaf5fadebab6b9c973698f5dcee406980b3498f38') // remove wl
+        if (Array.isArray(removeEvent)) {
+            removeEvent.forEach(e => {
+                let data = e.data
+                let addr = '0x' + data.substring(26,66)
+                let time = parseInt('0x' + data.substring(122,131))
+                if (mapEvent.has(addr)) {
+                    let tempTime = mapEvent.get(addr)
+                    if (time > tempTime) {
+                        mapEvent.delete(addr)
+                    }
                 }
-            }
-        })
+            })
+        }
         let listEvent = []
         for (const [keyMap, valueMap] of mapEvent.entries()) {
             listEvent.push({
-                time: new Date(valueMap*1000),
+                time: new Date(valueMap * 1000),
                 address: keyMap,
             })
         }
@@ -274,9 +296,9 @@ class App extends React.Component {
                     <Col md="3">
                         <Button onClick={() => this.connectWithMetamask()}>Connect metamask</Button>
                     </Col>
-                    <Col md="2"><a href={`https://testnet.bscscan.com/address/${process.env.REACT_APP_IDO_CONTRACT}`}>IDO contract</a></Col>
-                    <Col md="2"><a href={`https://testnet.bscscan.com/address/${this.state.bicAddress}`}>BIC contract</a></Col>
-                    <Col md="2"><a href={`https://testnet.bscscan.com/address/${this.state.busdAddress}`}>BUSD contract</a></Col>
+                    <Col md="2"><a href={`https://bscscan.com/address/${process.env.REACT_APP_IDO_CONTRACT}`}>IDO contract</a></Col>
+                    <Col md="2"><a href={`https://bscscan.com/address/${this.state.bicAddress}`}>BIC contract</a></Col>
+                    <Col md="2"><a href={`https://bscscan.com/address/${this.state.busdAddress}`}>BUSD contract</a></Col>
                 </Row>
                 <Row>
                     <h2>User:</h2><p>{this.state.currentAddress}</p>
