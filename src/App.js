@@ -4,7 +4,7 @@ import IDOAbi from "./abi/IDO.json";
 import BeInCoinAbi from "./abi/BeinChain.json";
 import BEP20Abi from "./abi/BEP20.json";
 import axios from "axios";
-import {Col, Row, Card, CardTitle, CardText, Button, Input, Collapse, Table} from 'reactstrap';
+import {Col, Row, Card, CardTitle, CardText, Button, Input, Table} from 'reactstrap';
 
 class App extends React.Component {
     constructor(props) {
@@ -33,28 +33,49 @@ class App extends React.Component {
             soldDetails: [],
             receivedDetails: [],
             whiteListResult: [],
+            whiteListResult2: [],
+            historyContribute1: [],
+            historyContribute2: [],
+            historyFilter1: [],
+            historyFilter2: [],
+            filter1: 'ALL',
+            filter2: 'ALL',
+            sumBUSD1: 0,
+            sumBIC1: 0,
+            sumBUSD2: 0,
+            sumBIC2: 0,
+            filterTime: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+            ownerContract1: '',
+            ownerContract2: '',
             isAdmin: false,
             isShowDetails: false,
+            isShowWhitelist: true,
+            isShowHistoryContribute: false,
             isBuyable: false,
             releaseWallet: null,
         }
     }
+
     componentDidMount() {
         this.syncStaticData().then(() => {
             this.syncContractBalance()
+            this.syncWhiteListFull()
+            this.syncHistoryContributeFull()
+            this.syncContractInfo()
+            this.syncHandleChangeFilter1("ALL")
         })
         this.syncChangeableData()
         this.syncBuyLogs()
     }
 
     connectWithMetamask() {
-        if(window.ethereum) {
+        if (window.ethereum) {
             const self = this
             this.setState({
                 web3: new Web3(window.ethereum)
             }, async function () {
                 try {
-                    await window.ethereum.request({ method: 'eth_requestAccounts' })
+                    await window.ethereum.request({method: 'eth_requestAccounts'})
                     const addresses = await self.state.web3.eth.getAccounts()
                     this.setState({
                         contract: new this.state.web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT),
@@ -70,7 +91,7 @@ class App extends React.Component {
                         this.state.isAdmin = true
                     }
 
-                    window.ethereum.on('accountsChanged', function(addresses){
+                    window.ethereum.on('accountsChanged', function (addresses) {
                         self.setState({
                             currentAddress: addresses[0],
                             releaseWallet: addresses[0]
@@ -122,6 +143,18 @@ class App extends React.Component {
         })
     }
 
+    async syncContractInfo() {
+        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
+        const contract1 = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
+        const contract2 = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT2)
+        let owner1 = await contract1.methods.owner().call()
+        let owner2 = await contract2.methods.owner().call()
+        this.setState({
+            ownerContract1: owner1,
+            ownerContract2: owner2,
+        })
+    }
+
     async syncUserBalance() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const bicContract = new web3.eth.Contract(BeInCoinAbi, this.state.bicAddress)
@@ -137,9 +170,9 @@ class App extends React.Component {
         let blockCurrent = await web3.eth.getBlockNumber()
         let bonus = 100;
         if (blockCurrent > startDecay) {
-            let countDecay = Math.floor((blockCurrent - startDecay)/(deltaDecay));
+            let countDecay = Math.floor((blockCurrent - startDecay) / (deltaDecay));
             if (countDecay < 10) {
-                bonus = 100 - countDecay*10;
+                bonus = 100 - countDecay * 10;
             } else {
                 bonus = 0;
             }
@@ -155,18 +188,18 @@ class App extends React.Component {
     async syncBuyLogs() {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const contract = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
-        const pastEvent = await contract.getPastEvents('BuySuccess', { fromBlock: 'latest', toBlock: 'latest' })
+        const pastEvent = await contract.getPastEvents('BuySuccess', {fromBlock: 'latest', toBlock: 'latest'})
         let soldLogs = []
         let receivedLogs = []
         pastEvent.forEach(e => {
             const result = e.returnValues
             soldLogs.push({
-                time: new Date(result.time*1000),
+                time: new Date(result.time * 1000),
                 amount: result.bicAmount,
                 user: result.buyer,
             })
             receivedLogs.push({
-                time: new Date(result.time*1000),
+                time: new Date(result.time * 1000),
                 amount: result.busdAmount,
                 user: result.buyer,
             })
@@ -177,16 +210,16 @@ class App extends React.Component {
         })
     }
 
-    async syncTopic(topic) {
+    async syncTopic(addressIDO, topic) {
         try {
             const response = await axios.get(process.env.REACT_APP_BSC_SCAN_API, {
-            params: {
-                module: "logs",
-                action: "getLogs",
-                address: process.env.REACT_APP_IDO_CONTRACT,
-                topic0: topic,
-                apikey: process.env.REACT_APP_BSC_SCAN_API_TOKEN,
-            }
+                params: {
+                    module: "logs",
+                    action: "getLogs",
+                    address: addressIDO,
+                    topic0: topic,
+                    apikey: process.env.REACT_APP_BSC_SCAN_API_TOKEN,
+                }
             });
             return response.data.result;
         } catch (error) {
@@ -194,21 +227,30 @@ class App extends React.Component {
         }
     }
 
-    async syncWhiteList() {
-        let addEvent = await this.syncTopic('0xaf031152c1a6c5d679409baa43923a71689187e8c73f3e9b156b411d011a1fe0') // add wl
-        let mapEvent=new Map()
+    async syncWhiteListFull() {
+        let list1 = await this.syncWhiteList(process.env.REACT_APP_IDO_CONTRACT)
+        let list2 = await this.syncWhiteList(process.env.REACT_APP_IDO_CONTRACT2)
+        this.setState({
+            whiteListResult: list1,
+            whiteListResult2: list2,
+        })
+    }
+
+    async syncWhiteList(addressIDO) {
+        let addEvent = await this.syncTopic(addressIDO, '0xaf031152c1a6c5d679409baa43923a71689187e8c73f3e9b156b411d011a1fe0') // add wl
+        let mapEvent = new Map()
         addEvent.forEach(e => {
             let data = e.data
-            let addr = '0x' + data.substring(26,66)
-            let time = parseInt('0x' + data.substring(122,131))
+            let addr = '0x' + data.substring(26, 66)
+            let time = parseInt('0x' + data.substring(122, 131))
             mapEvent.set(addr, time);
         })
-        let removeEvent = await this.syncTopic('0x732404ef841efeaff56d1e6eaf5fadebab6b9c973698f5dcee406980b3498f38') // remove wl
+        let removeEvent = await this.syncTopic(addressIDO, '0x732404ef841efeaff56d1e6eaf5fadebab6b9c973698f5dcee406980b3498f38') // remove wl
         if (Array.isArray(removeEvent)) {
             removeEvent.forEach(e => {
                 let data = e.data
-                let addr = '0x' + data.substring(26,66)
-                let time = parseInt('0x' + data.substring(122,131))
+                let addr = '0x' + data.substring(26, 66)
+                let time = parseInt('0x' + data.substring(122, 131))
                 if (mapEvent.has(addr)) {
                     let tempTime = mapEvent.get(addr)
                     if (time > tempTime) {
@@ -220,17 +262,79 @@ class App extends React.Component {
         let listEvent = []
         for (const [keyMap, valueMap] of mapEvent.entries()) {
             listEvent.push({
-                time: new Date(valueMap * 1000),
+                time: this.formatDatetime(valueMap),
                 address: keyMap,
             })
         }
+        return listEvent;
+    }
+
+    async syncHistoryContributeFull() {
+        let list1 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT)
+        let list2 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT2)
         this.setState({
-            whiteListResult: listEvent,
+            historyContribute1: list1,
+            historyContribute2: list2,
+        })
+    }
+
+    async syncHistoryContribute(addressIDO) {
+        let eventBuy = await this.syncTopic(addressIDO, '0xebdbbd9ad9f8301392fafec9c34b3d92288ebfc5a5811c398b9ba01ce36e1590') // buy
+        let listBuy = []
+        eventBuy.forEach(e => {
+            let data = e.data
+            let buyer = '0x' + data.substring(26, 66)
+            let busdNumber = parseInt('0x' + data.substring(67, 130)) / (1e18)
+            let bicNumber = parseInt('0x' + data.substring(131, 194)) / (1e18)
+            let time = this.formatDatetime(parseInt('0x' + data.substring(249, 258)))
+            listBuy.push({
+                buyer: buyer,
+                busd: busdNumber,
+                bic: bicNumber,
+                time: time,
+            })
+        })
+        return listBuy
+    }
+
+    async syncHandleChangeFilter1(valueMonth) {
+        let listBuy = []
+        let sumBIC = 0
+        let sumBUSD = 0
+        let checkAll = false
+        if (valueMonth === "ALL") {
+            checkAll = true
+        }
+        this.state.historyContribute1.forEach(e => {
+            if (e.time.indexOf(valueMonth) >= 0 || checkAll) {
+                sumBIC += e.bic
+                sumBUSD += e.busd
+                let buyer = e.buyer
+                let busdNumber = e.busd
+                let bicNumber = e.bic
+                let time = e.time
+                listBuy.push({
+                    buyer: buyer,
+                    busd: busdNumber,
+                    bic: bicNumber,
+                    time: time,
+                })
+            }
+        })
+        this.setState({
+            historyFilter1: listBuy,
+            sumBIC1: sumBIC,
+            sumBUSD1: sumBUSD,
         })
     }
 
     handleChange(event) {
         this.setState({[event.target.name]: event.target.value});
+    }
+
+    async handleChangeFilter1(event) {
+        this.setState({[event.target.name]: event.target.value});
+        await this.syncHandleChangeFilter1(event.target.value);
     }
 
     async updatePrice() {
@@ -253,15 +357,24 @@ class App extends React.Component {
         await this.state.contract.methods.addToWhitelist(this.state.whitelist).send({from: this.state.currentAddress})
         await this.syncChangeableData()
     }
+
     async removeWhiteList() {
         await this.state.contract.methods.removeToWhitelist(this.state.whitelist).send({from: this.state.currentAddress})
         await this.syncChangeableData()
     }
 
+    showWhitelist() {
+        this.setState({isShowWhitelist: !this.state.isShowWhitelist});
+    }
+
+    showHistoryContribute() {
+        this.setState({isShowHistoryContribute: !this.state.isShowHistoryContribute});
+    }
+
     async buyBIC() {
         const busdContract = new this.state.web3.eth.Contract(BEP20Abi, this.state.busdAddress)
         const allowance = await busdContract.methods.allowance(this.state.currentAddress, process.env.REACT_APP_IDO_CONTRACT).call()
-        if(allowance < this.state.buyAmount*1e18) {
+        if (allowance < this.state.buyAmount * 1e18) {
             await busdContract.methods.approve(process.env.REACT_APP_IDO_CONTRACT, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                 .send({from: this.state.currentAddress})
         }
@@ -281,9 +394,20 @@ class App extends React.Component {
         }, 0)
     }
 
+    formatDatetime(timestamp) {
+        const a = new Date(timestamp * 1000);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const year = a.getFullYear();
+        const month = months[a.getMonth()];
+        const date = a.getDate();
+        const hour = a.getHours();
+        const min = a.getMinutes();
+        const sec = a.getSeconds();
+        return date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec;
+    }
+
     toggle() {
         this.setState({isShowDetails: !this.state.isShowDetails});
-        this.syncWhiteList()
     }
 
     render() {
@@ -291,56 +415,29 @@ class App extends React.Component {
             <div>
                 <Row>
                     <Col md="3">
-                        <h1>BeIn IDO page</h1>
+                        <h1>Bein contract info</h1>
                     </Col>
                     <Col md="3">
                         <Button onClick={() => this.connectWithMetamask()}>Connect metamask</Button>
                     </Col>
-                    <Col md="2"><a href={`https://bscscan.com/address/${process.env.REACT_APP_IDO_CONTRACT}`}>IDO contract</a></Col>
+                    <Col md="2"><a href={`https://bscscan.com/address/${process.env.REACT_APP_IDO_CONTRACT}`}>IDO
+                        contract</a></Col>
                     <Col md="2"><a href={`https://bscscan.com/address/${this.state.bicAddress}`}>BIC contract</a></Col>
-                    <Col md="2"><a href={`https://bscscan.com/address/${this.state.busdAddress}`}>BUSD contract</a></Col>
+                    <Col md="2"><a href={`https://bscscan.com/address/${this.state.busdAddress}`}>BUSD
+                        contract</a></Col>
                 </Row>
-                <Row>
-                    <h2>User:</h2><p>{this.state.currentAddress}</p>
-                    <Col md="4">
-                        <Card body>
-                            <CardTitle tag="h3">Buy BIC (BUSD):</CardTitle>
-                            <Input name="buyAmount" type="number" value={this.state.buyAmount} onChange={(e) => this.handleChange(e)}/>
-                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.buyBIC()}>Buy</Button>
-                        </Card>
-                    </Col>
-                    <Col md="2">
-                        <Card body>
-                            <CardTitle tag="h3">Receive:</CardTitle>
-                            <p>{this.state.buyAmount * this.state.rateOutput / this.state.rateInput *(100 + this.state.bonusCurrent)/100 || 0} BIC</p>
-                        </Card>
-                        <Card body>
-                            <CardTitle tag="h3">Can you buy?</CardTitle>
-                            <p>{this.state.isBuyable ? 'Yes' : 'No'}</p>
-                        </Card>
-                    </Col>
-                    <Col md="2">
-                        <Card body>
-                            <CardTitle tag="h3">Balance:</CardTitle>
-                            <p>{this.state.bicUser} BIC</p>
-                            <p>{this.state.busdUser} BUSD</p>
-                        </Card>
-                    </Col>
-                    <Col md="4">
-                        <Card body>
-                            <CardTitle tag="h3">Note:</CardTitle>
-                            <CardText>The first time you buy, we need to request your permission to using your BUSD.</CardText>
-                        </Card>
-                    </Col>
-                </Row>
-                <Row style={this.state.isAdmin ? {} : { display: 'none' }}>
+                <Row style={this.state.isAdmin ? {} : {display: 'none'}}>
                     <h2>Admin:</h2><p>{this.state.adminAddress}</p>
                     <Col md="4">
                         <Card body>
-                            <CardTitle tag="h3">Update price (current 1BUSD = {this.state.rateOutput/this.state.rateInput || 0}BIC):</CardTitle>
-                            <Input type="number" placeholder="BUSD Rate" name="_rateInput" value={this.state._rateInput} onChange={(e) => this.handleChange(e)}/>
-                            <Input type="number" placeholder="BIC Rate" name="_rateOutput" value={this.state._rateOutput} onChange={(e) => this.handleChange(e)}  />
-                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.updatePrice()}>Change</Button>
+                            <CardTitle tag="h3">Update price (current 1BUSD
+                                = {this.state.rateOutput / this.state.rateInput || 0}BIC):</CardTitle>
+                            <Input type="number" placeholder="BUSD Rate" name="_rateInput" value={this.state._rateInput}
+                                   onChange={(e) => this.handleChange(e)}/>
+                            <Input type="number" placeholder="BIC Rate" name="_rateOutput"
+                                   value={this.state._rateOutput} onChange={(e) => this.handleChange(e)}/>
+                            <Button disabled={!this.state.isConnectWallet}
+                                    onClick={() => this.updatePrice()}>Change</Button>
                         </Card>
                     </Col>
                     <Col md="4">
@@ -348,88 +445,44 @@ class App extends React.Component {
                             <CardTitle tag="h3">Withdraw token:</CardTitle>
                             <CardText>BIC: {this.state.bicBalance}</CardText>
                             <CardText>BUSD: {this.state.busdBalance}</CardText>
-                            <Input type="select" name="withdrawToken" value={this.state.withdrawToken} onChange={(e) => this.handleChange(e)} >
+                            <Input type="select" name="withdrawToken" value={this.state.withdrawToken}
+                                   onChange={(e) => this.handleChange(e)}>
                                 <option value={this.state.bicAddress}>BIC</option>
                                 <option value={this.state.busdAddress}>BUSD</option>
                             </Input>
-                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.withdrawToken()}>Withdraw</Button>
+                            <Button disabled={!this.state.isConnectWallet}
+                                    onClick={() => this.withdrawToken()}>Withdraw</Button>
                         </Card>
                     </Col>
                     <Col md="4">
                         <Card body>
                             <CardTitle tag="h3">Transfer admin:</CardTitle>
-                            <Input type="string" name="transferAdmin" value={this.state.transferAdmin} onChange={(e) => this.handleChange(e)}  />
-                            <Button disabled={!this.state.isConnectWallet} onClick={() => this.transferAdmin()}>Transfer</Button>
+                            <Input type="string" name="transferAdmin" value={this.state.transferAdmin}
+                                   onChange={(e) => this.handleChange(e)}/>
+                            <Button disabled={!this.state.isConnectWallet}
+                                    onClick={() => this.transferAdmin()}>Transfer</Button>
                         </Card>
                         <Card body>
                             <CardTitle tag="h3">Whitelist:</CardTitle>
-                            <Input type="string" name="whitelist" value={this.state.whitelist} onChange={(e) => this.handleChange(e)}  />
+                            <Input type="string" name="whitelist" value={this.state.whitelist}
+                                   onChange={(e) => this.handleChange(e)}/>
                             <div>
-                                <Button disabled={!this.state.isConnectWallet} onClick={() => this.addWhiteList()}>Add</Button>
-                                <Button disabled={!this.state.isConnectWallet} onClick={() => this.removeWhiteList()}>Remove</Button>
+                                <Button disabled={!this.state.isConnectWallet}
+                                        onClick={() => this.addWhiteList()}>Add</Button>
+                                <Button disabled={!this.state.isConnectWallet}
+                                        onClick={() => this.removeWhiteList()}>Remove</Button>
                             </div>
                         </Card>
                     </Col>
                 </Row>
-                <Row style={this.state.isAdmin ? {} : { display: 'none' }}>
-                    <Row>
-                        <Col md="4"><h2>IDO info:</h2></Col>
-                        <Col md="4"><Button onClick={() => this.syncBuyLogs()}>Refresh</Button></Col>
-                        <Col md="4"><Button onClick={() => this.toggle()}>Show detail</Button></Col>
-                    </Row>
-                    <Row>
-                        <h3>Total sold BIC:  {this.amountReport(this.state.soldDetails) || 0}</h3>
-                        <Collapse isOpen={this.state.isShowDetails}>
-                            <Card>
-                                <Table>
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Time</th>
-                                            <th>Address</th>
-                                            <th>Amount (BIC)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {this.state.soldDetails.map((e,index) => <tr>
-                                            <th key={'sold' + index}>{index + 1}</th>
-                                            <td>{e.time.toString()}</td>
-                                            <td>{e.user}</td>
-                                            <td>{Web3.utils.fromWei(e.amount)}</td>
-                                        </tr>)}
-                                    </tbody>
-                                </Table>
-                            </Card>
-                        </Collapse>
-                    </Row>
-                    <Row>
-                        <h3>Total received BUSD: {this.amountReport(this.state.receivedDetails) || 0}</h3>
-                        <Collapse isOpen={this.state.isShowDetails}>
-                            <Card>
-                                <Table>
-                                    <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Time</th>
-                                        <th>Address</th>
-                                        <th>Amount (BUSD)</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {this.state.receivedDetails.map((e,index) => <tr>
-                                        <th key={'receive' + index}>{index + 1}</th>
-                                        <td>{e.time.toString()}</td>
-                                        <td>{e.user}</td>
-                                        <td>{Web3.utils.fromWei(e.amount)}</td>
-                                    </tr>)}
-                                    </tbody>
-                                </Table>
-                            </Card>
-                        </Collapse>
-                    </Row>
-                        <h3>Whitelist: {this.state.whiteListResult.length}</h3>
-                    <Row>
-                        <Collapse isOpen={this.state.isShowDetails}>
+                <p>
+                    <Button onClick={() => this.showWhitelist()}>Hide/show whitelist</Button>
+                </p>
+                <Row style={this.state.isShowWhitelist ? {} : {display: 'none'}}>
+                    <Col md="6">
+                        <h3>Whitelist contract1: {this.state.whiteListResult.length}</h3>
+                        <p>Owner: {this.state.ownerContract1}</p>
+                        <Row>
                             <Card>
                                 <Table>
                                     <thead>
@@ -440,7 +493,7 @@ class App extends React.Component {
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    {this.state.whiteListResult.map((e,index) => <tr>
+                                    {this.state.whiteListResult.map((e, index) => <tr>
                                         <th key={'address' + index}>{index + 1}</th>
                                         <td>{e.time.toString()}</td>
                                         <td>{e.address}</td>
@@ -448,9 +501,136 @@ class App extends React.Component {
                                     </tbody>
                                 </Table>
                             </Card>
-                        </Collapse>
-                    </Row>
+                        </Row>
+                    </Col>
+                    <Col md="6">
+                        <h3>Whitelist contract2: {this.state.whiteListResult2.length}</h3>
+                        <p>Owner: {this.state.ownerContract2}</p>
+                        <Row>
+                            <Card>
+                                <Table>
+                                    <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Time</th>
+                                        <th>Address</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {this.state.whiteListResult2.map((e, index) => <tr>
+                                        <th key={'address' + index}>{index + 1}</th>
+                                        <td>{e.time.toString()}</td>
+                                        <td>{e.address}</td>
+                                    </tr>)}
+                                    </tbody>
+                                </Table>
+                            </Card>
+                        </Row>
+                    </Col>
                 </Row>
+                <p>
+                    <Button onClick={() => this.showHistoryContribute()}>Hide/show history</Button>
+                </p>
+                <Row style={this.state.isShowHistoryContribute ? {} : {display: 'none'}}>
+                    <Col md="6">
+                        <Input type="select" name="filter1" value={this.state.filter1}
+                               onChange={(e) => this.handleChangeFilter1(e)}>
+                            <option value="ALL">ALL</option>
+                            <option value="Jun">Jun</option>
+                            <option value="Jul">Jul</option>
+                            <option value="Aug">Aug</option>
+                            <option value="Sep">Sep</option>
+                            <option value="Oct">Oct</option>
+                            <option value="Nov">Nov</option>
+                            <option value="Dec">Dec</option>
+                            <option value="Jan">Jan</option>
+                            <option value="Feb">Feb</option>
+                            <option value="Mar">Mar</option>
+                            <option value="Apr">Apr</option>
+                            <option value="May">May</option>
+                        </Input>
+                        <h3>History contract1: {this.state.historyFilter1.length}</h3>
+                        <p>Owner: {this.state.ownerContract1}</p>
+                        <Row>
+                            <Card>
+                                <Table>
+                                    <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Time</th>
+                                        <th>Address</th>
+                                        <th align="right">BUSD</th>
+                                        <th align="right">BIC</th>
+                                    </tr>
+                                    <tr>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th align="right">{this.state.sumBUSD1.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</th>
+                                        <th align="right">{this.state.sumBIC1.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {this.state.historyFilter1.map((e, index) => <tr>
+                                        <th key={'address' + index}>{index + 1}</th>
+                                        <td>{e.time.toString()}</td>
+                                        <td>{e.buyer}</td>
+                                        <td align="right">{e.busd.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                        <td align="right">{e.bic.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                    </tr>)}
+                                    </tbody>
+                                </Table>
+                            </Card>
+                        </Row>
+                    </Col>
+                    <Col md="6">
+                        <h3>History contract2: {this.state.historyContribute2.length}</h3>
+                        <p>Owner: {this.state.ownerContract2}</p>
+                        <Row>
+                            <Card>
+                                <Table>
+                                    <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Time</th>
+                                        <th>Address</th>
+                                        <th align="right">BUSD</th>
+                                        <th align="right">BIC</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {this.state.historyContribute2.map((e, index) => <tr>
+                                        <th key={'address' + index}>{index + 1}</th>
+                                        <td>{e.time.toString()}</td>
+                                        <td>{e.buyer}</td>
+                                        <td align="right">{e.busd.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                        <td align="right">{e.bic.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                    </tr>)}
+                                    </tbody>
+                                </Table>
+                            </Card>
+                        </Row>
+                    </Col>
+                </Row>
+
             </div>
         )
     }
