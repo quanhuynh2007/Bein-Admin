@@ -1,22 +1,22 @@
 {
   "files": {
-    "main.js": "/Bein-Admin/static/js/main.9c5bc2ae.chunk.js",
-    "main.js.map": "/Bein-Admin/static/js/main.9c5bc2ae.chunk.js.map",
+    "main.js": "/Bein-Admin/static/js/main.1afc2128.chunk.js",
+    "main.js.map": "/Bein-Admin/static/js/main.1afc2128.chunk.js.map",
     "runtime-main.js": "/Bein-Admin/static/js/runtime-main.2983e9b7.js",
     "runtime-main.js.map": "/Bein-Admin/static/js/runtime-main.2983e9b7.js.map",
     "static/css/2.800be05e.chunk.css": "/Bein-Admin/static/css/2.800be05e.chunk.css",
-    "static/js/2.cc7fd42e.chunk.js": "/Bein-Admin/static/js/2.cc7fd42e.chunk.js",
-    "static/js/2.cc7fd42e.chunk.js.map": "/Bein-Admin/static/js/2.cc7fd42e.chunk.js.map",
+    "static/js/2.a1830d82.chunk.js": "/Bein-Admin/static/js/2.a1830d82.chunk.js",
+    "static/js/2.a1830d82.chunk.js.map": "/Bein-Admin/static/js/2.a1830d82.chunk.js.map",
     "static/js/3.d5e3e4b0.chunk.js": "/Bein-Admin/static/js/3.d5e3e4b0.chunk.js",
     "static/js/3.d5e3e4b0.chunk.js.map": "/Bein-Admin/static/js/3.d5e3e4b0.chunk.js.map",
     "index.html": "/Bein-Admin/index.html",
     "static/css/2.800be05e.chunk.css.map": "/Bein-Admin/static/css/2.800be05e.chunk.css.map",
-    "static/js/2.cc7fd42e.chunk.js.LICENSE.txt": "/Bein-Admin/static/js/2.cc7fd42e.chunk.js.LICENSE.txt"
+    "static/js/2.a1830d82.chunk.js.LICENSE.txt": "/Bein-Admin/static/js/2.a1830d82.chunk.js.LICENSE.txt"
   },
   "entrypoints": [
     "static/js/runtime-main.2983e9b7.js",
     "static/css/2.800be05e.chunk.css",
-    "static/js/2.cc7fd42e.chunk.js",
-    "static/js/main.9c5bc2ae.chunk.js"
+    "static/js/2.a1830d82.chunk.js",
+    "static/js/main.1afc2128.chunk.js"
   ]
 }
