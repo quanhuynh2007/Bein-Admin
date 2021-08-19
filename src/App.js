@@ -62,10 +62,10 @@ class App extends React.Component {
             this.syncWhiteListFull()
             this.syncHistoryContributeFull()
             this.syncContractInfo()
-            this.syncHandleChangeFilter1("ALL")
         })
         this.syncChangeableData()
         this.syncBuyLogs()
+        this.syncHandleChangeFilter1("ALL")
     }
 
     connectWithMetamask() {
@@ -399,10 +399,10 @@ class App extends React.Component {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const year = a.getFullYear();
         const month = months[a.getMonth()];
-        const date = a.getDate();
-        const hour = a.getHours();
-        const min = a.getMinutes();
-        const sec = a.getSeconds();
+        const date = a.getDate().toString().padStart(2, '0');
+        const hour = a.getHours().toString().padStart(2, '0');
+        const min = a.getMinutes().toString().padStart(2, '0');
+        const sec = a.getSeconds().toString().padStart(2, '0');
         return date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec;
     }
 
@@ -554,13 +554,13 @@ class App extends React.Component {
                         <Row>
                             <Card>
                                 <Table>
-                                    <thead>
+                                    <thead align="right">
                                     <tr>
                                         <th>#</th>
                                         <th>Time</th>
                                         <th>Address</th>
-                                        <th align="right">BUSD</th>
-                                        <th align="right">BIC</th>
+                                        <th>BUSD</th>
+                                        <th>BIC</th>
                                     </tr>
                                     <tr>
                                         <th></th>
@@ -576,7 +576,7 @@ class App extends React.Component {
                                         })}</th>
                                     </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody align="right">
                                     {this.state.historyFilter1.map((e, index) => <tr>
                                         <th key={'address' + index}>{index + 1}</th>
                                         <td>{e.time.toString()}</td>
@@ -601,25 +601,25 @@ class App extends React.Component {
                         <Row>
                             <Card>
                                 <Table>
-                                    <thead>
+                                    <thead align="right">
                                     <tr>
                                         <th>#</th>
                                         <th>Time</th>
                                         <th>Address</th>
-                                        <th align="right">BUSD</th>
-                                        <th align="right">BIC</th>
+                                        <th>BUSD</th>
+                                        <th>BIC</th>
                                     </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody align="right">
                                     {this.state.historyContribute2.map((e, index) => <tr>
                                         <th key={'address' + index}>{index + 1}</th>
                                         <td>{e.time.toString()}</td>
                                         <td>{e.buyer}</td>
-                                        <td align="right">{e.busd.toLocaleString('en-US', {
+                                        <td>{e.busd.toLocaleString('en-US', {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2
                                         })}</td>
-                                        <td align="right">{e.bic.toLocaleString('en-US', {
+                                        <td>{e.bic.toLocaleString('en-US', {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2
                                         })}</td>
