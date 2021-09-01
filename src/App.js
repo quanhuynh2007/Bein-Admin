@@ -36,17 +36,23 @@ class App extends React.Component {
             whiteListResult2: [],
             historyContribute1: [],
             historyContribute2: [],
+            historyContribute3: [],
             historyFilter1: [],
             historyFilter2: [],
+            historyFilter3: [],
             filter1: 'ALL',
             filter2: 'ALL',
+            filter3: 'ALL',
             sumBUSD1: 0,
             sumBIC1: 0,
             sumBUSD2: 0,
             sumBIC2: 0,
+            sumBUSD3: 0,
+            sumBIC3: 0,
             filterTime: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
             ownerContract1: '',
             ownerContract2: '',
+            ownerContract3: '',
             isAdmin: false,
             isShowDetails: false,
             isShowWhitelist: true,
@@ -147,11 +153,14 @@ class App extends React.Component {
         const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
         const contract1 = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT)
         const contract2 = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT2)
+        const contract3 = new web3.eth.Contract(IDOAbi, process.env.REACT_APP_IDO_CONTRACT3)
         let owner1 = await contract1.methods.owner().call()
         let owner2 = await contract2.methods.owner().call()
+        let owner3 = await contract3.methods.owner().call()
         this.setState({
             ownerContract1: owner1,
             ownerContract2: owner2,
+            ownerContract3: owner3,
         })
     }
 
@@ -272,9 +281,11 @@ class App extends React.Component {
     async syncHistoryContributeFull() {
         let list1 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT)
         let list2 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT2)
+        let list3 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT3)
         this.setState({
             historyContribute1: list1,
             historyContribute2: list2,
+            historyContribute3: list3,
         })
     }
 
@@ -359,6 +370,38 @@ class App extends React.Component {
         })
     }
 
+    async syncHandleChangeFilter3(valueMonth) {
+        let listBuy = []
+        let sumBIC = 0
+        let sumBUSD = 0
+        let checkAll = false
+        if (valueMonth === "ALL") {
+            checkAll = true
+        }
+        this.state.historyContribute3.forEach(e => {
+            if (e.time.indexOf(valueMonth) >= 0 || checkAll) {
+                sumBIC += e.bic
+                sumBUSD += e.busd
+                let buyer = e.buyer
+                let busdNumber = e.busd
+                let bicNumber = e.bic
+                let time = e.time
+                listBuy.push({
+                    buyer: buyer,
+                    busd: busdNumber,
+                    bic: bicNumber,
+                    time: time,
+                })
+            }
+        })
+        this.setState({
+            historyFilter3: listBuy,
+            sumBIC3: sumBIC,
+            sumBUSD3: sumBUSD,
+        })
+    }
+
+
     handleChange(event) {
         this.setState({[event.target.name]: event.target.value});
     }
@@ -371,6 +414,11 @@ class App extends React.Component {
     async handleChangeFilter2(event) {
         this.setState({[event.target.name]: event.target.value});
         await this.syncHandleChangeFilter2(event.target.value);
+    }
+
+    async handleChangeFilter3(event) {
+        this.setState({[event.target.name]: event.target.value});
+        await this.syncHandleChangeFilter3(event.target.value);
     }
 
     async updatePrice() {
@@ -568,7 +616,7 @@ class App extends React.Component {
                     <Button onClick={() => this.showHistoryContribute()}>Hide/show history</Button>
                 </p>
                 <Row style={this.state.isShowHistoryContribute ? {} : {display: 'none'}}>
-                    <Col md="6">
+                    <Col md="4">
                         <Input type="select" name="filter1" value={this.state.filter1}
                                onChange={(e) => this.handleChangeFilter1(e)}>
                             <option value="ALL">ALL</option>
@@ -631,7 +679,7 @@ class App extends React.Component {
                             </Card>
                         </Row>
                     </Col>
-                    <Col md="6">
+                    <Col md="4">
                         <Input type="select" name="filter2" value={this.state.filter2}
                                onChange={(e) => this.handleChangeFilter2(e)}>
                             <option value="ALL">ALL</option>
@@ -677,6 +725,69 @@ class App extends React.Component {
                                     </thead>
                                     <tbody align="right">
                                     {this.state.historyFilter2.map((e, index) => <tr>
+                                        <th key={'address' + index}>{index + 1}</th>
+                                        <td>{e.time.toString()}</td>
+                                        <td>{e.buyer}</td>
+                                        <td>{e.busd.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                        <td>{e.bic.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</td>
+                                    </tr>)}
+                                    </tbody>
+                                </Table>
+                            </Card>
+                        </Row>
+                    </Col>
+                    <Col md="4">
+                        <Input type="select" name="filter3" value={this.state.filter3}
+                               onChange={(e) => this.handleChangeFilter3(e)}>
+                            <option value="ALL">ALL</option>
+                            <option value="Jun">Jun</option>
+                            <option value="Jul">Jul</option>
+                            <option value="Aug">Aug</option>
+                            <option value="Sep">Sep</option>
+                            <option value="Oct">Oct</option>
+                            <option value="Nov">Nov</option>
+                            <option value="Dec">Dec</option>
+                            <option value="Jan">Jan</option>
+                            <option value="Feb">Feb</option>
+                            <option value="Mar">Mar</option>
+                            <option value="Apr">Apr</option>
+                            <option value="May">May</option>
+                        </Input>
+                        <h3>History contract3: {this.state.historyFilter3.length}</h3>
+                        <p>Owner: {this.state.ownerContract3}</p>
+                        <Row>
+                            <Card>
+                                <Table>
+                                    <thead align="right">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Time</th>
+                                        <th>Address</th>
+                                        <th>BUSD</th>
+                                        <th>BIC</th>
+                                    </tr>
+                                    <tr>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th align="right">{this.state.sumBUSD3.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</th>
+                                        <th align="right">{this.state.sumBIC3.toLocaleString('en-US', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody align="right">
+                                    {this.state.historyFilter3.map((e, index) => <tr>
                                         <th key={'address' + index}>{index + 1}</th>
                                         <td>{e.time.toString()}</td>
                                         <td>{e.buyer}</td>
