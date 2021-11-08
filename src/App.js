@@ -236,6 +236,25 @@ class App extends React.Component {
         }
     }
 
+    async syncTopicRange(addressIDO, topic, from, to) {
+        try {
+            const response = await axios.get(process.env.REACT_APP_BSC_SCAN_API, {
+                params: {
+                    module: "logs",
+                    action: "getLogs",
+                    fromBlock: from,
+                    toBlock: to,
+                    address: addressIDO,
+                    topic0: topic,
+                    apikey: process.env.REACT_APP_BSC_SCAN_API_TOKEN,
+                }
+            });
+            return response.data.result;
+        } catch (error) {
+            return [];
+        }
+    }
+
     async syncWhiteListFull() {
         let list1 = await this.syncWhiteList(process.env.REACT_APP_IDO_CONTRACT)
         let list2 = await this.syncWhiteList(process.env.REACT_APP_IDO_CONTRACT2)
@@ -279,9 +298,9 @@ class App extends React.Component {
     }
 
     async syncHistoryContributeFull() {
-        let list1 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT)
-        let list2 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT2)
-        let list3 = await this.syncHistoryContribute(process.env.REACT_APP_IDO_CONTRACT3)
+        let list1 = await this.syncHistoryContributeV2(process.env.REACT_APP_IDO_CONTRACT)
+        let list2 = await this.syncHistoryContributeV2(process.env.REACT_APP_IDO_CONTRACT2)
+        let list3 = await this.syncHistoryContributeV2(process.env.REACT_APP_IDO_CONTRACT3)
         this.setState({
             historyContribute1: list1,
             historyContribute2: list2,
@@ -305,6 +324,33 @@ class App extends React.Component {
                 time: time,
             })
         })
+        return listBuy
+    }
+
+    async syncHistoryContributeV2(addressIDO) {
+        let listBuy = []
+        const web3 = new Web3(process.env.REACT_APP_BSC_ENDPOINT)
+        let blockCurrent = await web3.eth.getBlockNumber()
+        let startBlock = 8745746;
+        while (startBlock < blockCurrent) {
+            let start = startBlock;
+            let end = startBlock + 432000;
+            let eventBuy = await this.syncTopicRange(addressIDO, '0xebdbbd9ad9f8301392fafec9c34b3d92288ebfc5a5811c398b9ba01ce36e1590', start, end) // buy
+            eventBuy.forEach(e => {
+                let data = e.data
+                let buyer = '0x' + data.substring(26, 66)
+                let busdNumber = parseInt('0x' + data.substring(67, 130)) / (1e18)
+                let bicNumber = parseInt('0x' + data.substring(131, 194)) / (1e18)
+                let time = this.formatDatetime(parseInt('0x' + data.substring(249, 258)))
+                listBuy.push({
+                    buyer: buyer,
+                    busd: busdNumber,
+                    bic: bicNumber,
+                    time: time,
+                })
+            })
+            startBlock = end+1;
+        }
         return listBuy
     }
 
